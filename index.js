@@ -68,6 +68,29 @@ app.get('/api/gxtg', function(req, res) {
   });
 });
 
+app.post('/api/login', (req, res) => {
+  var body = req.body;
+  var username = body.username; // hieu
+  var password = body.password;
+
+  User.findOne({username: username}, (err, user) => {
+    if (err) {
+      res.json({success: 0, message: "Database error, could not find user", err: err});
+    } else {
+      if (!user) {
+        res.json({success: 0, message: "User not found" });
+      } else {
+        var hash = user.password;
+        if (bcrypt.compareSync(password, hash)) {
+          res.json({success: 1, message: "Login OK" });
+        } else {
+          res.json({success: 0, message: "Invalid password"});
+        }
+      }
+    }
+  });
+});
+
 app.post('/api/register', function(req, res) {
   var body = req.body;
   var username = body.username;
