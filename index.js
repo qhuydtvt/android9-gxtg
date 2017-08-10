@@ -3,14 +3,19 @@ var bodyParser = require('body-parser');
 var mongoose = require('mongoose');
 var bcrypt = require('bcrypt');
 var _ = require('lodash');
+var jwt = require('jsonwebtoken');
+
 
 var Hottie = require('./models/hottie');
 var User = require('./models/user');
+var config = require('./config');
 
 var app = express();
+app.set('superSecret', config.superSecret);
 
 mongoose.connect('mongodb://admin:admin@ds117913.mlab.com:17913/android9-gxtg',
 { useMongoClient: true });
+
 
 
 
@@ -32,43 +37,10 @@ app.use(bodyParser.json());
 app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 
-app.get('/', function(request, response) {
-  response.render('pages/index');
-});
+var apiRoutes = express.Router();
 
-app.get('/api/testhash', function(req, res) {
-  var hash = bcrypt.hashSync('hieuhuhong', 10);
-  res.json({hash: hash});
-});
 
-app.post('/api/testhash', function(req, res) {
-  var password = req.body.password;
-  var hash = bcrypt.hashSync('hieuhuhong', 10);
-
-  var result = bcrypt.compareSync(password, hash);
-
-  if (result) {
-    res.json({message : "Ahihi"});
-  } else {
-    res.json({message : "Đi chỗ khác chơi"});
-  }
-});
-
-app.get('/api', function(req, res) {
-  res.json({ 'hello': 'world' });
-});
-
-app.get('/api/gxtg', function(req, res) {
-  Hottie.find(function(err, hotties) {
-    if (err) {
-      res.json({ success: 0, message: 'Could not get data from mlab' });
-    } else {
-      res.json(hotties);
-    }
-  });
-});
-
-app.post('/api/login', (req, res) => {
+apiRoutes.post('/login', (req, res) => {
   var body = req.body;
   var username = body.username; // hieu
   var password = body.password;
@@ -82,7 +54,10 @@ app.post('/api/login', (req, res) => {
       } else {
         var hash = user.password;
         if (bcrypt.compareSync(password, hash)) {
-          res.json({success: 1, message: "Login OK" });
+
+          var token = jwt.sign(user, app.get('superSecret'), { expiresIn : 60*60*24 });
+
+          res.json({success: 1, message: "Login OK", token: token });
         } else {
           res.json({success: 0, message: "Invalid password"});
         }
@@ -91,7 +66,7 @@ app.post('/api/login', (req, res) => {
   });
 });
 
-app.post('/api/register', function(req, res) {
+apiRoutes.post('/register', function(req, res) {
   var body = req.body;
   var username = body.username;
   var password = body.password;
@@ -129,10 +104,65 @@ app.post('/api/register', function(req, res) {
       }
     }
   });
-
 });
 
-app.post('/api/gxtg', function(req, res) {
+apiRoutes.use(function(req, res, next) {
+  var token = req.body.token || req.query.token || req.headers['x-access-token'];
+  if (!token) {
+    res.json({success: 0, message: "Token not provided"});
+  } else {
+    jwt.verify(token, app.get('superSecret'), function(err, decodedUser) {
+        if (err) {
+          res.json({success: 0, message: "Could not understand token", err: err});
+        } else {
+          req.user = decodedUser;
+          next();
+        }
+    })
+  }
+});
+
+app.get('/', function(request, response) {
+  response.render('pages/index');
+});
+
+app.get('/api/testhash', function(req, res) {
+  var hash = bcrypt.hashSync('hieuhuhong', 10);
+  res.json({hash: hash});
+});
+
+app.post('/api/testhash', function(req, res) {
+  var password = req.body.password;
+  var hash = bcrypt.hashSync('hieuhuhong', 10);
+
+  var result = bcrypt.compareSync(password, hash);
+
+  if (result) {
+    res.json({message : "Ahihi"});
+  } else {
+    res.json({message : "Đi chỗ khác chơi"});
+  }
+});
+
+
+
+
+apiRoutes.get('/api', function(req, res) {
+  res.json({ 'hello': 'world' });
+});
+
+apiRoutes.get('/gxtg', function(req, res) {
+  var user = req.user;
+  Hottie.find(function(err, hotties) {
+    if (err) {
+      res.json({ success: 0, message: 'Could not get data from mlab' });
+    } else {
+      res.json(hotties);
+    }
+  });
+});
+
+apiRoutes.post('/gxtg', function(req, res) {
   var body = req.body;
 
   var name = body.name;
@@ -153,6 +183,8 @@ app.post('/api/gxtg', function(req, res) {
     }
   });
 });
+
+app.use('/api', apiRoutes);
 
 app.listen(app.get('port'), function() {
 
