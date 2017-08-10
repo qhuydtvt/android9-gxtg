@@ -1,12 +1,18 @@
 var express = require('express');
 var bodyParser = require('body-parser');
 var mongoose = require('mongoose');
+var bcrypt = require('bcrypt');
+var _ = require('lodash');
 
 var Hottie = require('./models/hottie');
+var User = require('./models/user');
+
 var app = express();
 
 mongoose.connect('mongodb://admin:admin@ds117913.mlab.com:17913/android9-gxtg',
 { useMongoClient: true });
+
+
 
 // var hottie = new Hottie({
 //     name: "Lệ rơi",
@@ -30,6 +36,23 @@ app.get('/', function(request, response) {
   response.render('pages/index');
 });
 
+app.get('/api/testhash', function(req, res) {
+  var hash = bcrypt.hashSync('hieuhuhong', 10);
+  res.json({hash: hash});
+});
+
+app.post('/api/testhash', function(req, res) {
+  var password = req.body.password;
+  var hash = bcrypt.hashSync('hieuhuhong', 10);
+
+  var result = bcrypt.compareSync(password, hash);
+
+  if (result) {
+    res.json({message : "Ahihi"});
+  } else {
+    res.json({message : "Đi chỗ khác chơi"});
+  }
+});
 
 app.get('/api', function(req, res) {
   res.json({ 'hello': 'world' });
@@ -45,8 +68,48 @@ app.get('/api/gxtg', function(req, res) {
   });
 });
 
+app.post('/api/register', function(req, res) {
+  var body = req.body;
+  var username = body.username;
+  var password = body.password;
+
+  var saveUser = function(username, password) {
+  var user = new User({
+    username: username,
+    password: bcrypt.hashSync(password, 10) // TODO
+  });
+
+  user.save(function(err, saveUser) {
+    if (err) {
+      res.json({
+        success: 0,
+        message: 'Saved data failed'
+      });
+    } else {
+      res.json({
+        success: 1,
+        message: 'Saved data OK',
+        data: _.pick(saveUser, ['username', '_id', '__v'])
+      });
+    }
+  });
+  };
+
+  User.findOne({username: username}, function(err, user) {
+    if (err) {
+      res.json({success: 0, message: "Database error, could not find user"});
+    } else {
+      if(user) {
+        res.json({success: 0, message: "Register failed, duplicate user"});
+      } else {
+        saveUser(username, password);
+      }
+    }
+  });
+
+});
+
 app.post('/api/gxtg', function(req, res) {
-  // CREATE
   var body = req.body;
 
   var name = body.name;
